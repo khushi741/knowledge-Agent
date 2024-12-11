@@ -1,0 +1,7 @@
+streamlit
+llama-index
+pinecone
+python-dotenv
+openai
+cohere
+langchain
