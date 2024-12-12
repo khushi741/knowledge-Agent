@@ -1,88 +1,84 @@
+import os
 import streamlit as st
 from pinecone import Pinecone
-from llama_index.llms.gemini import Gemini
 from llama_index.vector_stores.pinecone import PineconeVectorStore
-from llama_index.embeddings.gemini import GeminiEmbedding
 from llama_index.core import StorageContext, VectorStoreIndex, SimpleDirectoryReader
 from llama_index.core import Settings
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Initialize Pinecone client
+pinecone_client = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+
+# Function to set up the document ingestion process
+def ingest_documents():
+    if not os.path.exists("data") or not os.listdir("data"):
+        st.error("The 'data' directory is empty or does not exist. Please upload documents.")
+        return None
+
+    # Load documents from the 'data' directory
+    documents = SimpleDirectoryReader("data").load_data()
+
+    # Initialize Pinecone index and vector store
+    pinecone_index = pinecone_client.Index("knowledgeagent")
+    vector_store = PineconeVectorStore(pinecone_index=pinecone_index)
+
+    # Create storage context and index from documents
+    storage_context = StorageContext.from_defaults(vector_store=vector_store)
+    index = VectorStoreIndex.from_documents(documents, storage_context=storage_context)
+
+    st.success("Documents ingested successfully!")
+    return index
+
+# Function to handle file uploads
+def handle_upload(uploaded_file):
+    if uploaded_file is not None:
+        if not os.path.exists("data"):
+            os.makedirs("data")
+
+        # Save the uploaded file to the 'data' directory
+        with open(f"data/{uploaded_file.name}", "wb") as f:
+            f.write(uploaded_file.getbuffer())
+
+        st.success(f"Uploaded file: {uploaded_file.name}")
+    else:
+        st.error("No file uploaded.")
 
 # Streamlit App UI
 st.title("Knowledge Agent Chatbot")
 st.write("Ingest documents to the Pinecone index and interact with the Knowledge Agent.")
 
-# Input for API keys
-google_api_key = st.text_input("Enter your Google Gemini API Key:", type="password")
-pinecone_api_key = st.text_input("Enter your Pinecone API Key:", type="password")
-
-if google_api_key and pinecone_api_key:
-    try:
-        # Initialize Gemini LLM and embedding model
-        llm = Gemini(api_key=google_api_key)
-        embed_model = GeminiEmbedding(model_name="models/embedding-001")
-
-        # Configure settings for LLM and embeddings
-        Settings.llm = llm
-        Settings.embed_model = embed_model
-        Settings.chunk_size = 1024
-
-        # Initialize Pinecone client
-        pinecone_client = Pinecone(api_key=pinecone_api_key)
-
-        st.success("API keys validated successfully!")
-    except Exception as e:
-        st.error(f"Error initializing services: {str(e)}")
-else:
-    st.warning("Please provide both API keys to proceed.")
-
-# Global variable to store the index
-index = None
-
-# Function to load documents and initialize the index in Pinecone
-def ingest_documents():
-    global index
-    try:
-        # Load documents from the specified folder
-        documents = SimpleDirectoryReader("data").load_data()
-
-        # Initialize Pinecone index and vector store
-        pinecone_index = pinecone_client.Index("knowledgeagent")
-        vector_store = PineconeVectorStore(pinecone_index=pinecone_index)
-
-        # Create storage context and index from documents
-        storage_context = StorageContext.from_defaults(vector_store=vector_store)
-        index = VectorStoreIndex.from_documents(documents, storage_context=storage_context)
-
-        st.success("Documents ingested successfully!")
-    except Exception as e:
-        st.error(f"Error during document ingestion: {str(e)}")
+# File uploader for dynamic uploads
+uploaded_file = st.file_uploader("Upload a document to ingest", type=["txt", "pdf", "docx"])
+if uploaded_file:
+    handle_upload(uploaded_file)
 
 # Button to trigger document ingestion
-if google_api_key and pinecone_api_key:
-    if st.button("Ingest Documents"):
-        ingest_documents()
-else:
-    st.warning("Provide API keys first to enable document ingestion.")
+index = None
+if st.button("Ingest Documents"):
+    index = ingest_documents()
 
-# Chat interface
-if google_api_key and pinecone_api_key:
-    if index:
+# Create the chat interface
+if index:
+    # Set up the chat engine after index is created
+    chat_engine = index.as_chat_engine()
+
+    # Create input box for user to type query
+    user_input = st.text_input("You: ", "")
+
+    if user_input:
         try:
-            # Set up the chat engine after index is created
-            chat_engine = index.as_chat_engine()
+            # Get response from the chat engine
+            response = chat_engine.chat(user_input)
 
-            # Create input box for user to type query
-            user_input = st.text_input("You: ", "")
-
-            if user_input:
-                # Get response from the chat engine
-                response = chat_engine.chat(user_input)
-
-                # Display agent's response
-                st.write(f"Agent: {response.response}")
+            # Display agent's response
+            st.write(f"Agent: {response.response}")
         except Exception as e:
             st.error(f"Error during query: {str(e)}")
-    else:
-        st.warning("Please ingest documents first by clicking the 'Ingest Documents' button.")
+else:
+    st.warning("Please ingest documents first by clicking the 'Ingest Documents' button.")
 
 # Optional: Clear the session state to reset the app
 if st.button("Clear"):
