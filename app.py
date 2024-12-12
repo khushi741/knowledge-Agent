@@ -15,8 +15,8 @@ google_api_key = st.text_input("Enter your Google Gemini API Key:", type="passwo
 pinecone_api_key = st.text_input("Enter your Pinecone API Key:", type="password")
 
 if google_api_key and pinecone_api_key:
-    # Initialize Gemini LLM and embedding model
     try:
+        # Initialize Gemini LLM and embedding model
         llm = Gemini(api_key=google_api_key)
         embed_model = GeminiEmbedding(model_name="models/embedding-001")
 
@@ -34,8 +34,12 @@ if google_api_key and pinecone_api_key:
 else:
     st.warning("Please provide both API keys to proceed.")
 
+# Global variable to store the index
+index = None
+
 # Function to load documents and initialize the index in Pinecone
 def ingest_documents():
+    global index
     try:
         # Load documents from the specified folder
         documents = SimpleDirectoryReader("data").load_data()
@@ -49,37 +53,36 @@ def ingest_documents():
         index = VectorStoreIndex.from_documents(documents, storage_context=storage_context)
 
         st.success("Documents ingested successfully!")
-        return index
     except Exception as e:
         st.error(f"Error during document ingestion: {str(e)}")
-        return None
 
 # Button to trigger document ingestion
 if google_api_key and pinecone_api_key:
     if st.button("Ingest Documents"):
-        index = ingest_documents()
+        ingest_documents()
 else:
     st.warning("Provide API keys first to enable document ingestion.")
 
 # Chat interface
-if google_api_key and pinecone_api_key and 'index' in locals():
-    # Set up the chat engine after index is created
-    chat_engine = index.as_chat_engine()
-
-    # Create input box for user to type query
-    user_input = st.text_input("You: ", "")
-
-    if user_input:
+if google_api_key and pinecone_api_key:
+    if index:
         try:
-            # Get response from the chat engine
-            response = chat_engine.chat(user_input)
+            # Set up the chat engine after index is created
+            chat_engine = index.as_chat_engine()
 
-            # Display agent's response
-            st.write(f"Agent: {response.response}")
+            # Create input box for user to type query
+            user_input = st.text_input("You: ", "")
+
+            if user_input:
+                # Get response from the chat engine
+                response = chat_engine.chat(user_input)
+
+                # Display agent's response
+                st.write(f"Agent: {response.response}")
         except Exception as e:
             st.error(f"Error during query: {str(e)}")
-else:
-    st.warning("Ingest documents first by clicking the 'Ingest Documents' button.")
+    else:
+        st.warning("Please ingest documents first by clicking the 'Ingest Documents' button.")
 
 # Optional: Clear the session state to reset the app
 if st.button("Clear"):
