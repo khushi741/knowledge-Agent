@@ -1,4 +1,3 @@
-import os
 import streamlit as st
 from pinecone import Pinecone
 from llama_index.llms.gemini import Gemini
@@ -6,51 +5,64 @@ from llama_index.vector_stores.pinecone import PineconeVectorStore
 from llama_index.embeddings.gemini import GeminiEmbedding
 from llama_index.core import StorageContext, VectorStoreIndex, SimpleDirectoryReader
 from llama_index.core import Settings
-from dotenv import load_dotenv
-
-
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Set up LLM and embedding model using environment variables
-llm = Gemini(api_key=os.environ["GOOGLE_API_KEY"])
-embed_model = GeminiEmbedding(model_name="models/embedding-001")
-
-# Configure settings for LLM and embeddings
-Settings.llm = llm
-Settings.embed_model = embed_model
-Settings.chunk_size = 1024
-
-# Initialize Pinecone client
-pinecone_client = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
-
-# Function to load documents and initialize the index in Pinecone
-def ingest_documents():
-    # Load documents from the specified folder
-    documents = SimpleDirectoryReader("data").load_data()
-
-    # Initialize Pinecone index and vector store
-    pinecone_index = pinecone_client.Index("knowledgeagent")
-    vector_store = PineconeVectorStore(pinecone_index=pinecone_index)
-
-    # Create storage context and index from documents
-    storage_context = StorageContext.from_defaults(vector_store=vector_store)
-    index = VectorStoreIndex.from_documents(documents, storage_context=storage_context)
-
-    st.success("Documents ingested successfully!")
-    return index
 
 # Streamlit App UI
 st.title("Knowledge Agent Chatbot")
 st.write("Ingest documents to the Pinecone index and interact with the Knowledge Agent.")
 
+# Input for API keys
+google_api_key = st.text_input("Enter your Google Gemini API Key:", type="password")
+pinecone_api_key = st.text_input("Enter your Pinecone API Key:", type="password")
+
+if google_api_key and pinecone_api_key:
+    # Initialize Gemini LLM and embedding model
+    try:
+        llm = Gemini(api_key=google_api_key)
+        embed_model = GeminiEmbedding(model_name="models/embedding-001")
+
+        # Configure settings for LLM and embeddings
+        Settings.llm = llm
+        Settings.embed_model = embed_model
+        Settings.chunk_size = 1024
+
+        # Initialize Pinecone client
+        pinecone_client = Pinecone(api_key=pinecone_api_key)
+
+        st.success("API keys validated successfully!")
+    except Exception as e:
+        st.error(f"Error initializing services: {str(e)}")
+else:
+    st.warning("Please provide both API keys to proceed.")
+
+# Function to load documents and initialize the index in Pinecone
+def ingest_documents():
+    try:
+        # Load documents from the specified folder
+        documents = SimpleDirectoryReader("data").load_data()
+
+        # Initialize Pinecone index and vector store
+        pinecone_index = pinecone_client.Index("knowledgeagent")
+        vector_store = PineconeVectorStore(pinecone_index=pinecone_index)
+
+        # Create storage context and index from documents
+        storage_context = StorageContext.from_defaults(vector_store=vector_store)
+        index = VectorStoreIndex.from_documents(documents, storage_context=storage_context)
+
+        st.success("Documents ingested successfully!")
+        return index
+    except Exception as e:
+        st.error(f"Error during document ingestion: {str(e)}")
+        return None
+
 # Button to trigger document ingestion
-if st.button("Ingest Documents"):
-    index = ingest_documents()
-    
-# Create the chat interface
-if 'index' in locals():
+if google_api_key and pinecone_api_key:
+    if st.button("Ingest Documents"):
+        index = ingest_documents()
+else:
+    st.warning("Provide API keys first to enable document ingestion.")
+
+# Chat interface
+if google_api_key and pinecone_api_key and 'index' in locals():
     # Set up the chat engine after index is created
     chat_engine = index.as_chat_engine()
 
@@ -67,7 +79,7 @@ if 'index' in locals():
         except Exception as e:
             st.error(f"Error during query: {str(e)}")
 else:
-    st.warning("Please ingest documents first by clicking the 'Ingest Documents' button.")
+    st.warning("Ingest documents first by clicking the 'Ingest Documents' button.")
 
 # Optional: Clear the session state to reset the app
 if st.button("Clear"):
