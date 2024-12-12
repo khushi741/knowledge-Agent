@@ -7,7 +7,7 @@ from llama_index.embeddings.gemini import GeminiEmbedding
 from llama_index.core import StorageContext, VectorStoreIndex, SimpleDirectoryReader
 from llama_index.core import Settings
 from dotenv import load_dotenv
-from langchain.llms import Cohere
+
 
 
 # Load environment variables from .env file
